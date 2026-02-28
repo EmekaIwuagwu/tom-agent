@@ -1,0 +1,24 @@
+services:
+  - type: worker
+    name: tom-agent
+    env: docker
+    region: frankfurt
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_OWNER_USER_ID
+        sync: false
+      - key: MEMORY_FILE_PATH
+        value: /data/memory.json
+      - key: GMAIL_TOKEN_PATH
+        value: /data/gmail_token.json
+      - key: GMAIL_CREDENTIALS_PATH
+        value: /data/gmail_credentials.json
+    disk:
+      name: memory-storage
+      mountPath: /data
+      sizeGB: 1

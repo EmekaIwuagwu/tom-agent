@@ -1,0 +1,46 @@
+import logging
+import time
+from dotenv import load_dotenv
+
+# Load env variables first
+load_dotenv()
+
+# Initialize memory early
+from memory import get_memory_instance
+memory = get_memory_instance()
+
+from scheduler import start_scheduler, stop_scheduler
+from telegram_bot import run_bot
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+def main():
+    logger.info("Initializing Tom Agent...")
+    
+    # 1. Start Background Scheduler
+    start_scheduler()
+    
+    try:
+        # 2. Start Telegram Bot (blocks until stopped)
+        logger.info("Tom is coming online...")
+        run_bot()
+    except KeyboardInterrupt:
+        logger.info("Tom shut down locally.")
+    except Exception as e:
+        logger.error(f"Tom failed with error: {e}")
+    finally:
+        logger.info("Stopping scheduler...")
+        stop_scheduler()
+
+if __name__ == '__main__':
+    # Ensure playwright is installed at least structurally on Render/VPS
+    import subprocess
+    try:
+        import playwright
+        # Check if browser needs to be installed, useful on VPS
+        # Note: on Render usually need to run `playwright install chromium` in build script
+    except ImportError:
+        logger.warning("Playwright not found, proceeding with caution.")
+    
+    main()
