@@ -1,7 +1,7 @@
 import logging
 from memory import get_memory_instance
 from blockchain_monitor import check_networks
-from gmail_service import check_unread_emails_api, send_email_api
+from gmail_service import check_emails_api, send_email_api, get_full_email_body
 from scraper import scrape_url, search_investors, process_and_save_investor
 
 logger = logging.getLogger(__name__)
@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 # Core tools that Gemini can call
 
 def get_memory_state() -> str:
-    """Returns the current state of Tom's memory."""
+    """Returns the current state of Tom's memory (startup name, pitch, etc)."""
     memory = get_memory_instance()
     mem_str = (
         f"Owner Name: {memory.get('owner_name')}\n"
@@ -32,21 +32,28 @@ def check_blockchain_networks() -> str:
     """Checks the status of Kortana testnet and mainnet, and returns the report."""
     return check_networks(is_automated=False)
 
-def check_unread_emails() -> str:
-    """Scans the Gmail inbox for unread emails and returns a structured list."""
-    emails = check_unread_emails_api()
+def check_emails(status: str = "all", max_results: int = 15, search_query: str = "") -> str:
+    """Scans the Gmail inbox optionally filtering by status, max_results, and a search_query."""
+    emails = check_emails_api(status, max_results, search_query)
     if not emails:
-        return "No unread emails right now."
+        return f"No emails found matching status '{status}' and query '{search_query}'."
         
-    report = f"📬 You have {len(emails)} unread emails:\n\n"
+    report = f"📬 Found {len(emails)} emails:\n\n"
     for i, e in enumerate(emails, 1):
         report += (
             f"{i}. From: {e['sender_name']} ({e['sender_email']})\n"
             f"   Subject: {e['subject']}\n"
+            f"   Date: {e['date']}\n"
+            f"   ID: {e['id']}\n"
             f"   Preview: \"{e['preview']}\"\n\n"
         )
-    report += "Reply with 'read X' to see full email, or 'reply X' to respond."
+    report += "To read the full content of an email, use 'read_email_content' with the specific ID."
     return report
+
+def read_email_content(email_id: str) -> str:
+    """Fetches the full text content of a specific email message using its ID."""
+    content = get_full_email_body(email_id)
+    return f"Full Body of Email {email_id}:\n\n{content}"
 
 def send_gmail(to_email: str, subject: str, content: str, attach_deck: bool = False) -> str:
     """Sends an email using the Gmail API, optionally attaching the pitch deck."""
@@ -79,8 +86,7 @@ def scrape_webpage(url: str) -> str:
     return (
         f"Scraped {url}:\n"
         f"Text excerpt: {data['text']}...\n"
-        f"Emails found: {', '.join(data['emails_found'])}\n\n"
-        f"If this is an investor, call save_investor_contact to save them."
+        f"Emails found: {', '.join(data['emails_found'])}\n"
     )
 
 def quick_search_investors(query: str) -> str:
@@ -109,25 +115,10 @@ def get_investor_pipeline() -> str:
         
     report = "📊 *Investor Pipeline*\n\n"
     stages = ["Prospect", "Contacted", "Replied", "Meeting Scheduled", "Closed", "Passed"]
-    # Ensure all stages exist in report visually
-    found = False
     for stage in stages:
         if stage in by_status:
-           found = True
-           report += f"{'🟡' if stage == 'Prospect' else '📤' if stage == 'Contacted' else '📬' if stage == 'Replied' else '📅' if stage == 'Meeting Scheduled' else '✅' if stage == 'Closed' else '❌'} {stage}:\n"
-           report += "\n".join(by_status[stage])
-           report += "\n\n"
-           
-    # add unknown stages
-    for stage in by_status:
-        if stage not in stages:
-            report += f"❓ {stage}:\n" + "\n".join(by_status[stage]) + "\n\n"
+           report += f"*{stage}*:\n" + "\n".join(by_status[stage]) + "\n\n"
             
-    if not found:
-        # just list what we have
-        for stage, items in by_status.items():
-             report += f"{stage}:\n" + "\n".join(items) + "\n\n"
-
     return report
 
 def update_investor_status(email: str, new_status: str) -> str:
@@ -143,7 +134,8 @@ AVAILABLE_TOOLS = {
     "get_memory_state": get_memory_state,
     "set_memory_value": set_memory_value,
     "check_blockchain_networks": check_blockchain_networks,
-    "check_unread_emails": check_unread_emails,
+    "check_emails": check_emails,
+    "read_email_content": read_email_content,
     "send_gmail": send_gmail,
     "scrape_webpage": scrape_webpage,
     "quick_search_investors": quick_search_investors,

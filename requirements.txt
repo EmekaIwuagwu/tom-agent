@@ -11,3 +11,4 @@ APScheduler
 tzlocal
 python-magic
 python-magic-bin ; sys_platform == 'win32'
+openai

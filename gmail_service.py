@@ -13,7 +13,6 @@ from googleapiclient.discovery import build
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Scopes required: Send, Read (for scanning), and Modify (to mark as read or star if needed)
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.send',
     'https://www.googleapis.com/auth/gmail.readonly',
@@ -41,9 +40,6 @@ def get_gmail_service():
             if not os.path.exists(creds_path):
                 logger.error(f"Error: {creds_path} not found. Cannot connect to Gmail API.")
                 return None
-            
-            # Using run_local_server will open the system's ACTUAL default browser (Chrome/Edge/etc)
-            # This completely avoids the "insecure browser" block that hits automated Chromium.
             flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
             creds = flow.run_local_server(port=0)
             
@@ -85,34 +81,88 @@ def send_email_api(to_email: str, subject: str, content: str, attachment_path: s
         logger.error(f"Error sending email: {e}")
         return False
 
-def check_unread_emails_api() -> List[Dict]:
-    """Scans the Gmail inbox for unread emails using the Gmail API."""
+def parse_parts(parts):
+    """Recursively parses email parts to find the best text body."""
+    body = ""
+    for part in parts:
+        mime_type = part.get('mimeType')
+        data = part.get('body', {}).get('data')
+        
+        if mime_type == 'text/plain' and data:
+            return base64.urlsafe_b64decode(data).decode()
+        elif mime_type == 'text/html' and data:
+            # Save HTML as fallback but keep looking for plain text
+            body = base64.urlsafe_b64decode(data).decode()
+        elif 'parts' in part:
+            recursive_body = parse_parts(part['parts'])
+            if recursive_body:
+                return recursive_body
+    return body
+
+def get_full_email_body(message_id: str) -> str:
+    """Fetches and decodes the full text body of an email, handling multi-part messages."""
+    service = get_gmail_service()
+    if not service:
+        return "Gmail service unavailable."
+    
+    try:
+        msg = service.users().messages().get(userId='me', id=message_id, format='full').execute()
+        payload = msg.get('payload', {})
+        
+        if 'parts' in payload:
+            body = parse_parts(payload['parts'])
+        else:
+            data = payload.get('body', {}).get('data')
+            if data:
+                body = base64.urlsafe_b64decode(data).decode()
+            else:
+                body = ""
+                
+        if not body:
+            return f"Snippet: {msg.get('snippet', 'No content found.')}"
+            
+        return body
+    except Exception as e:
+        logger.error(f"Error getting email body: {e}")
+        return f"Failed to retrieve email content: {e}"
+
+def check_emails_api(status: str = 'unread', max_results: int = 50, search_query: str = '') -> List[Dict]:
+    """Scans the Gmail inbox for emails with metadata. Supports search constraints."""
     service = get_gmail_service()
     if not service:
         return []
         
     try:
-        # List unread messages
-        results = service.users().messages().list(userId='me', q='is:unread').execute()
+        query_parts = []
+        if status == 'unread':
+            query_parts.append('is:unread')
+        elif status == 'read':
+            query_parts.append('is:read')
+            
+        if search_query:
+            query_parts.append(search_query)
+            
+        final_query = " ".join(query_parts)
+        
+        results = service.users().messages().list(userId='me', q=final_query, maxResults=max_results).execute()
         messages = results.get('messages', [])
         
         unread_emails = []
         for msg in messages:
-            msg_data = service.users().messages().get(userId='me', id=msg['id'], format='full').execute()
+            msg_data = service.users().messages().get(userId='me', id=msg['id'], format='metadata', metadataHeaders=['Subject', 'From', 'Date']).execute()
             
             headers = msg_data['payload']['headers']
             subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
             sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown')
-            
-            # Simple snippet for preview
-            preview = msg_data.get('snippet', '')
+            date = next((h['value'] for h in headers if h['name'] == 'Date'), 'Unknown Date')
             
             unread_emails.append({
                 "id": msg['id'],
                 "sender_name": sender.split('<')[0].strip(),
                 "sender_email": sender,
                 "subject": subject,
-                "preview": preview
+                "preview": msg_data.get('snippet', ''),
+                "date": date
             })
         return unread_emails
     except Exception as e:

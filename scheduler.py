@@ -4,7 +4,7 @@ from tzlocal import get_localzone
 import time
 
 from blockchain_monitor import check_networks
-from gmail_service import check_unread_emails_api
+from gmail_service import check_emails_api
 from telegram_bot import send_message_to_owner
 from memory import get_memory_instance
 
@@ -24,7 +24,7 @@ def job_check_emails():
     logger.info("Running scheduled email check...")
     try:
         memory = get_memory_instance()
-        emails = check_unread_emails_api()
+        emails = check_emails_api(status='unread')
         
         if emails:
             # Get previously seen emails to avoid spamming
