@@ -2,9 +2,6 @@ import time
 import requests
 import logging
 from memory import get_memory_instance
-from telegram_bot import send_message_to_owner
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 NETWORKS = {
@@ -53,6 +50,7 @@ def check_networks(is_automated: bool = False):
     If is_automated is True, it only sends a Telegram message if there's an issue or if it's the daily summary.
     If is_automated is False (on-demand), it always sends a message.
     """
+    from telegram_bot import send_message_to_owner
     memory = get_memory_instance()
     
     testnet_block = fetch_latest_block(NETWORKS["KORTANA TESTNET"]["rpc_url"])

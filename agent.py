@@ -1,7 +1,8 @@
 import os
 import logging
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from memory import get_memory_instance
 from tools import AVAILABLE_TOOLS
 
@@ -11,10 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-else:
-    logger.error("GEMINI_API_KEY not found in environment.")
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 SYSTEM_PROMPT = """
 You are TOM, a personal autonomous AI Agent that operates like a real human employee. 
@@ -35,15 +33,7 @@ Always check your memory first for context. Do not repeat questions you already 
 If the user asks to send an email or start a campaign, draft the email and show it to the user FIRST, asking for confirmation like "looks good" or "send".
 """
 
-# Convert dictionary of functions to a list of Python functions
-agent_tools = list(AVAILABLE_TOOLS.values())
-
-def get_gemini_model():
-    return genai.GenerativeModel(
-        model_name="gemini-1.5-pro",
-        system_instruction=SYSTEM_PROMPT,
-        tools=agent_tools
-    )
+MODEL = "gemini-3-flash-preview"
 
 def handle_user_input(user_message: str) -> str:
     """
@@ -52,36 +42,73 @@ def handle_user_input(user_message: str) -> str:
     and returns Gemini's final response text.
     """
     memory = get_memory_instance()
-    
-    # Format history for Gemini SDK
     history = memory.get_conversation_context()
-    
-    # Start a chat session with history
-    model = get_gemini_model()
-    
-    # Convert history format
-    formatted_history = []
+
+    # Build conversation history in genai format
+    contents = []
     for msg in history:
-        # Map our internal role representation to Gemini's expected formats
-        role = msg["role"]
-        if role == "assistant":
-            role = "model"
-        formatted_history.append({"role": role, "parts": [msg["content"]]})
-        
+        role = "model" if msg["role"] == "assistant" else "user"
+        contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
+
+    # Add current user message
+    contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
+
     try:
-        chat = model.start_chat(history=formatted_history, enable_automatic_function_calling=True)
-        
-        # Send message
-        response = chat.send_message(user_message)
-        
-        reply_text = response.text
-        
-        if reply_text:
-             memory.add_conversation_message("user", user_message)
-             memory.add_conversation_message("assistant", reply_text)
-             
-        return reply_text
-    
+        # Agentic loop: keep calling Gemini until there are no more tool calls
+        while True:
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    tools=list(AVAILABLE_TOOLS.values()),
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)
+                )
+            )
+
+            candidate = response.candidates[0]
+            
+            # Check if there are any tool calls
+            tool_calls = [part for part in candidate.content.parts if part.function_call]
+
+            if not tool_calls:
+                # No tool calls — final text response
+                reply_text = "".join(part.text for part in candidate.content.parts if part.text)
+                if reply_text:
+                    memory.add_conversation_message("user", user_message)
+                    memory.add_conversation_message("assistant", reply_text)
+                return reply_text
+
+            # Append the model's response (with tool calls) to the history
+            contents.append(candidate.content)
+
+            # Execute each tool call and collect results
+            tool_results = []
+            for part in tool_calls:
+                fn_name = part.function_call.name
+                fn_args = dict(part.function_call.args)
+                logger.info(f"Tom calling tool: {fn_name}({fn_args})")
+
+                if fn_name in AVAILABLE_TOOLS:
+                    try:
+                        result = AVAILABLE_TOOLS[fn_name](**fn_args)
+                    except Exception as e:
+                        result = f"Error executing {fn_name}: {e}"
+                else:
+                    result = f"Unknown tool: {fn_name}"
+
+                tool_results.append(
+                    types.Part(
+                        function_response=types.FunctionResponse(
+                            name=fn_name,
+                            response={"result": str(result)}
+                        )
+                    )
+                )
+
+            # Add tool results back into the conversation
+            contents.append(types.Content(role="user", parts=tool_results))
+
     except Exception as e:
         logger.error(f"Error calling Gemini: {e}")
-        return f"Sorry, I encountered an internal error: {e}"
+        return f"Sorry, I hit an error: {e}"

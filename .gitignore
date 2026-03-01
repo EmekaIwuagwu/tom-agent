@@ -1,0 +1,9 @@
+.env
+__pycache__/
+gmail_credentials.json
+gmail_token.json
+memory.json
+*.pyc
+venv/
+.pytest_cache/
+check_models.py

@@ -20,7 +20,7 @@ application = None
 def get_application():
     global application
     if not application and TELEGRAM_TOKEN:
-        application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+        application = ApplicationBuilder().token(TELEGRAM_TOKEN).connect_timeout(30.0).read_timeout(30.0).build()
     return application
 
 def send_message_to_owner(text: str):

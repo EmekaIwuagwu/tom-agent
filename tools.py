@@ -1,7 +1,7 @@
 import logging
 from memory import get_memory_instance
 from blockchain_monitor import check_networks
-from gmail_service import check_unread_emails_playwright, send_email_api
+from gmail_service import check_unread_emails_api, send_email_api
 from scraper import scrape_url, search_investors, process_and_save_investor
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ def check_blockchain_networks() -> str:
 
 def check_unread_emails() -> str:
     """Scans the Gmail inbox for unread emails and returns a structured list."""
-    emails = check_unread_emails_playwright()
+    emails = check_unread_emails_api()
     if not emails:
         return "No unread emails right now."
         
