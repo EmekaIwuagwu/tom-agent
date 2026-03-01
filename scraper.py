@@ -52,10 +52,6 @@ def search_investors(query: str, max_results: int = 6) -> dict:
     """
     Searches the web using DuckDuckGo to find targeted pages, then scrapes them to extract text and emails.
     """
-    # If the AI didn't use advanced dorks but wants emails, force add footprints to ensure we find real emails on the page.
-    if "@" not in query and "email" in query.lower() and "site:" not in query:
-        query = f'{query.replace("email", "").strip()} ("@gmail.com" OR "@hotmail.com" OR "@yahoo.com" OR "contact@")'
-        
     logger.info(f"Searching web for: {query}")
     results_text = []
     all_emails = set()

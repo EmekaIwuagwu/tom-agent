@@ -37,12 +37,18 @@ TOOL GUIDE & CRITICAL RULES:
 2. 'read_email_content': ONLY for reading the FULL body of a specific email using an ID.
 3. 'send_gmail': ONLY for sending emails (e.g., investor pitches or custom messages).
 4. 'check_blockchain_networks': ONLY for checking the status of Kortana Testnet/Mainnet blocks.
-5. 'quick_search_investors': When asked to find investors, USE THIS TOOL. Pass search queries like 'seed blockchain investors "@gmail.com"'. Do NOT give up if the first try fails; try different queries.
-6. 'scrape_webpage': If you find an interesting VC website but no emails in the search snippet, use this tool to visit their direct URL and rip the emails from their actual site.
+5. 'quick_search_investors': A powerful DuckDuckGo headless scraper. USE THIS TOOL for ALL internet searches (not just investors).
+   - You MUST formulate your own advanced Google Dorks based on what the user asks.
+   - If the user says "search LinkedIn", use `site:linkedin.com`.
+   - If the user asks for csv files, use `filetype:csv`.
+   - If the user asks to find emails, append `("@gmail.com" OR "contact@")` or similar to your query.
+   - Example query: `site:linkedin.com "blockchain investor" ("@gmail.com" OR "@hotmail.com")`
+6. 'scrape_webpage': If you find an interesting website but no emails in the search snippet, use this tool to visit their direct URL and rip the emails from their actual site.
 
 CRITICAL:
-- If the user asks about finding new targeted people or investors, use 'quick_search_investors'!
-- Do NOT say "I cannot browse the web." You CAN browse the web using these two tools. You are a scraping powerhouse.
+- If the user asks to search LinkedIn, Google, or DuckDuckGo, you MUST use 'quick_search_investors'!
+- Do NOT say "I cannot browse LinkedIn/Google". You CAN browse them by using advanced dorks in 'quick_search_investors'.
+- You are an expert at constructing perfect Boolean search queries. Listen to the EXACT search query the user wants to use.
 """
 
 def get_tool_definitions():
@@ -111,11 +117,11 @@ def get_tool_definitions():
             "type": "function",
             "function": {
                 "name": "quick_search_investors",
-                "description": "Searches the web (Google/LinkedIn) for investors based on a query, returning text and found emails.",
+                "description": "Searches the web (Google/DuckDuckGo/LinkedIn) using advanced Dorks based on a query, returning text and found emails/data.",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "The search query (e.g. 'blockchain investors email')."}
+                        "query": {"type": "string", "description": "The exact search query including Dorks (e.g., 'site:linkedin.com \"blockchain investors\" filetype:csv')."}
                     },
                     "required": ["query"]
                 }
