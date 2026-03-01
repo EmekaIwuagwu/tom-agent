@@ -64,6 +64,16 @@ def job_check_emails():
     except Exception as e:
         logger.error(f"Error checking emails via scheduler: {e}")
 
+def job_keep_alive():
+    logger.info("Executing keep-alive ping...")
+    try:
+        import urllib.request
+        # Ping the public Render URL to prevent the free tier from sleeping
+        urllib.request.urlopen("https://tom-agent.onrender.com")
+        logger.info("Keep-alive ping successful.")
+    except Exception as e:
+        logger.error(f"Keep-alive ping failed: {e}")
+
 def start_scheduler():
     logger.info("Starting APScheduler for daily tasks...")
     
@@ -72,6 +82,9 @@ def start_scheduler():
     
     # Check emails every 2 hours
     scheduler.add_job(job_check_emails, 'interval', hours=2)
+    
+    # Keep the application alive (Render sleeps after 15 mins of inactivity)
+    scheduler.add_job(job_keep_alive, 'interval', minutes=10)
     
     scheduler.start()
 
