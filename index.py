@@ -1,5 +1,8 @@
 import logging
 import time
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from dotenv import load_dotenv
 
 # Load env variables first
@@ -18,6 +21,19 @@ logger = logging.getLogger(__name__)
 def main():
     logger.info("Initializing Tom Agent...")
     
+    # 0. Start Dummy Web Server for Render Port Binding
+    class HealthCheckHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"Tom is ALIVE!")
+            
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    logger.info(f"Binded health check server to port {port}")
+
     # 1. Start Background Scheduler
     start_scheduler()
     
