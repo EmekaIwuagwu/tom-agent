@@ -3,6 +3,7 @@ from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import logging
 from memory import get_memory_instance
+from duckduckgo_search import DDGS
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,12 +48,55 @@ def scrape_url(url: str) -> dict:
         logger.error(f"Error scraping {url}: {e}")
         return {"url": url, "text": "", "emails_found": []}
 
-def search_investors(query: str) -> dict:
+def search_investors(query: str, max_results: int = 6) -> dict:
     """
-    Simulates a Google search or parses text to find targets.
+    Searches the web using DuckDuckGo to find targeted pages, then scrapes them to extract text and emails.
     """
-    search_url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
-    return scrape_url(search_url)
+    # If the AI didn't use advanced dorks but wants emails, force add footprints to ensure we find real emails on the page.
+    if "@" not in query and "email" in query.lower() and "site:" not in query:
+        query = f'{query.replace("email", "").strip()} ("@gmail.com" OR "@hotmail.com" OR "@yahoo.com" OR "contact@")'
+        
+    logger.info(f"Searching web for: {query}")
+    results_text = []
+    all_emails = set()
+    
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
+            
+        if not results:
+            return {"text": "No search results found.", "emails_found": []}
+            
+        for r in results:
+            link = r.get("href")
+            title = r.get("title")
+            snippet = r.get("body", "")
+            
+            # Extract emails directly from snippets
+            snippet_emails = re.findall(r'[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+', snippet)
+            for e in snippet_emails:
+                all_emails.add(e)
+            
+            results_text.append(f"Title: {title}\nURL: {link}\nSnippet: {snippet}\n")
+            
+            # Deep scrape the result link to find more emails
+            scrape_data = scrape_url(link)
+            if scrape_data["emails_found"]:
+                for e in scrape_data["emails_found"]:
+                    all_emails.add(e)
+            
+            # Add a bit of the site text for the AI to read
+            site_text = scrape_data["text"][:2000] # Limit text per site to save tokens
+            if site_text:
+                results_text.append(f"Content from {link}:\n{site_text}...\n")
+                
+        return {
+            "text": "\n---\n".join(results_text)[:15000],  # Limit total context size
+            "emails_found": list(all_emails)
+        }
+    except Exception as e:
+        logger.error(f"Search failed: {e}")
+        return {"text": f"Search encountered an error: {e}", "emails_found": []}
 
 def process_and_save_investor(email: str, name: str, company: str, focus: str):
     """
